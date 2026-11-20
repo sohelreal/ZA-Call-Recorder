@@ -10,6 +10,9 @@
         android:id="@+id/nav_speakerphone"
         android:title="Toggle Auto Speakerphone Boost" />
     <item
+        android:id="@+id/nav_audio_source"
+        android:title="Audio Source (Pixel Fix)" />
+    <item
         android:id="@+id/nav_audio_format"
         android:title="Audio Format (AAC / AMR)" />
     <item

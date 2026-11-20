@@ -1,12 +1,12 @@
-# ZA Call Recorder (Android) - Two-Sided Recording Edition
+# ZA Call Recorder (Android) - v3 (Pixel / Android 14+ Fix)
 
 Automatic Phone Call Recorder & Voice Memo app for Android, configured to build automatically into an `.apk` using **GitHub Actions**.
 
-## Two-Sided Recording Setup (Important for Android 10+)
-Because Google restricts direct internal call-line capture (`VOICE_CALL`) on unrooted Android 10+ devices, this app uses three mechanisms to capture **both sides** of every call:
-1. **Accessibility Service (`CallAccessibilityService`)**: Keeps audio capture active during phone calls (same method used by Cube ACR). Open the app drawer -> **Enable Accessibility Service** -> turn on **ZA Call Recorder**.
-2. **Smart Audio Source Fallback**: Automatically tries `VOICE_CALL` -> `VOICE_COMMUNICATION` -> `VOICE_RECOGNITION` -> `MIC`.
-3. **Auto-Speakerphone Boost (Optional)**: Toggle **Auto Speakerphone** in the app drawer to automatically route call audio through the speaker during recording, guaranteeing loud, clear two-sided audio on any phone.
+## What's Fixed in v3
+1. **Fixes Silent Recordings on Pixel / Android 10+**: Moves `MediaRecorder` directly inside `CallAccessibilityService` using `AudioSource.VOICE_RECOGNITION` (the only audio source AOSP allows an Accessibility Service to capture unmuted during a cellular call).
+2. **Fixes Missing Caller Name & Phone Number**: Queries Android's Call Log & Contacts automatically after the call ends to label every recording with the **Caller Name**, **Phone Number**, and **Direction (`IN` / `OUT`)**.
+3. **Modern Speakerphone Routing (Android 12+)**: Uses `AudioManager.setCommunicationDevice()` on Android 12+ (Pixel 7) when Auto Speakerphone Boost is enabled.
+4. **Working Tabs**: `ALL`, `INCALL`, and `OUTCALL` now filter recordings automatically.
 
 ## How to Build the APK on GitHub
 1. Upload all files (including `.github/workflows/build-apk.yml`) to your GitHub repository.

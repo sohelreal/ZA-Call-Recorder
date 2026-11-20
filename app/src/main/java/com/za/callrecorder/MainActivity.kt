@@ -37,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fabVoiceMemo: FloatingActionButton
     private var mediaPlayer: MediaPlayer? = null
     private var isVoiceMemoRecording = false
+    private var selectedTab = "ALL"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,7 +61,10 @@ class MainActivity : AppCompatActivity() {
             tabLayout.addTab(tabLayout.newTab().setText(it))
         }
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab?) { loadRecordings() }
+            override fun onTabSelected(tab: TabLayout.Tab?) {
+                selectedTab = tab?.text?.toString() ?: "ALL"
+                loadRecordings()
+            }
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
             override fun onTabReselected(tab: TabLayout.Tab?) { loadRecordings() }
         })
@@ -71,6 +75,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.nav_toggle_recording -> toggleAutoRecording()
                 R.id.nav_accessibility -> openAccessibilitySettings()
                 R.id.nav_speakerphone -> toggleAutoSpeakerphone()
+                R.id.nav_audio_source -> showAudioSourceDialog()
                 R.id.nav_audio_format -> showFormatDialog()
                 R.id.nav_refresh -> loadRecordings()
             }
@@ -103,11 +108,27 @@ class MainActivity : AppCompatActivity() {
         updateStatusBanner()
     }
 
+    private fun showAudioSourceDialog() {
+        val sources = arrayOf("VOICE_RECOGNITION", "MIC", "VOICE_COMMUNICATION", "VOICE_CALL")
+        val prefs = getSharedPreferences("za_prefs", MODE_PRIVATE)
+        val current = prefs.getString("audio_source", "VOICE_RECOGNITION")
+        val checked = sources.indexOf(current).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Audio Source (Use VOICE_RECOGNITION on Pixel)")
+            .setSingleChoiceItems(sources, checked) { dialog, which ->
+                prefs.edit().putString("audio_source", sources[which]).apply()
+                updateStatusBanner()
+                dialog.dismiss()
+            }
+            .show()
+    }
+
     private fun requestRequiredPermissions() {
         val perms = mutableListOf(
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.READ_PHONE_STATE,
-            Manifest.permission.READ_CALL_LOG
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.READ_CONTACTS
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -155,6 +176,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             val intent = Intent(this, CallRecorderService::class.java).apply {
                 action = CallRecorderService.ACTION_STOP
+                putExtra("IS_CALL", false)
             }
             startService(intent)
             isVoiceMemoRecording = false
@@ -168,13 +190,18 @@ class MainActivity : AppCompatActivity() {
         val enabled = prefs.getBoolean("recording_enabled", true)
         val speaker = prefs.getBoolean("auto_speakerphone", false)
         val acc = if (CallAccessibilityService.isRunning) "ON" else "OFF"
-        tvStatus.text = "Auto: ${if (enabled) "ON" else "OFF"} | Both-Sides Acc: $acc | Speaker: ${if (speaker) "ON" else "OFF"}"
+        tvStatus.text = "Auto: ${if (enabled) "ON" else "OFF"} | Acc: $acc | Speaker: ${if (speaker) "ON" else "OFF"}"
     }
 
     private fun loadRecordings() {
         val dir = File(getExternalFilesDir(null), "Recordings")
-        val files = dir.listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
-        rvRecordings.adapter = RecordingAdapter(files)
+        val allFiles = dir.listFiles()?.sortedByDescending { it.lastModified() } ?: emptyList()
+        val filtered = when (selectedTab) {
+            "INCALL" -> allFiles.filter { it.name.startsWith("IN_") }
+            "OUTCALL" -> allFiles.filter { it.name.startsWith("OUT_") }
+            else -> allFiles
+        }
+        rvRecordings.adapter = RecordingAdapter(filtered)
     }
 
     private fun playFile(file: File) {
@@ -214,13 +241,22 @@ class MainActivity : AppCompatActivity() {
             val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
                 .format(Date(file.lastModified()))
             val sizeKb = file.length() / 1024
-            holder.tvName.text = file.name
+            holder.tvName.text = formatDisplayTitle(file.name)
             holder.tvMeta.text = "$dateStr  •  ${sizeKb} KB"
             holder.btnPlay.setOnClickListener { playFile(file) }
             holder.btnShare.setOnClickListener { ShareHelper.shareRecording(this@MainActivity, file) }
             holder.btnDelete.setOnClickListener {
                 file.delete()
                 loadRecordings()
+            }
+        }
+
+        private fun formatDisplayTitle(rawName: String): String {
+            val base = rawName.substringBeforeLast(".")
+            return when {
+                base.startsWith("IN_") -> "↙ " + base.removePrefix("IN_").replace("_", " ")
+                base.startsWith("OUT_") -> "↗ " + base.removePrefix("OUT_").replace("_", " ")
+                else -> base.replace("_", " ")
             }
         }
 

@@ -38,7 +38,7 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- Accessibility Service required for two-sided call recording on Android 10+ -->
+        <!-- Accessibility Service performs call recording directly on Android 10+ -->
         <service
             android:name=".CallAccessibilityService"
             android:exported="true"

@@ -4,31 +4,42 @@ import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
 
 /**
- * Keeps the app's audio recording privileges active during active phone calls
- * on Android 10+ so both sides of the conversation can be captured.
+ * Runs MediaRecorder directly inside the AccessibilityService context using
+ * VOICE_RECOGNITION so Android 10+ (including Pixel 7) does not silence the recording.
  */
 class CallAccessibilityService : AccessibilityService() {
 
+    private var engine: AudioRecordEngine? = null
+
     companion object {
         @Volatile
-        var isRunning: Boolean = false
+        var instance: CallAccessibilityService? = null
+
+        val isRunning: Boolean
+            get() = instance != null
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        isRunning = true
+        instance = this
+        engine = AudioRecordEngine(this)
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Active listener keeps the accessibility session bound during calls
+    fun startCallRecording(initialLabel: String) {
+        engine?.startRecording(initialLabel, isCall = true)
     }
 
-    override fun onInterrupt() {
-        isRunning = false
+    fun stopCallRecording(fallbackNumber: String?) {
+        engine?.stopRecording(isCall = true, fallbackNumber = fallbackNumber)
     }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+
+    override fun onInterrupt() {}
 
     override fun onDestroy() {
         super.onDestroy()
-        isRunning = false
+        engine?.stopRecording(isCall = false, fallbackNumber = null)
+        instance = null
     }
 }

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ZA Call Recorder</string>
-    <string name="accessibility_description">Enables ZA Call Recorder to capture both sides of incoming and outgoing calls on Android 10+.</string>
+    <string name="accessibility_description">Enables ZA Call Recorder to capture unmuted audio during calls on Android 10+.</string>
 </resources>
