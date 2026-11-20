@@ -6,11 +6,14 @@ import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.ActionBarDrawerToggle
@@ -22,6 +25,7 @@ import androidx.drawerlayout.widget.DrawerLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.card.MaterialCardView
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.navigation.NavigationView
 import com.google.android.material.tabs.TabLayout
@@ -35,9 +39,38 @@ class MainActivity : AppCompatActivity() {
     private lateinit var rvRecordings: RecyclerView
     private lateinit var tvStatus: TextView
     private lateinit var fabVoiceMemo: FloatingActionButton
+
+    // Interactive Audio Player views
+    private lateinit var playerCard: MaterialCardView
+    private lateinit var tvPlayerTitle: TextView
+    private lateinit var seekBar: SeekBar
+    private lateinit var tvCurrentTime: TextView
+    private lateinit var tvTotalTime: TextView
+    private lateinit var btnPlayPause: ImageButton
+    private lateinit var btnRewind: ImageButton
+    private lateinit var btnForward: ImageButton
+    private lateinit var btnSpeed: TextView
+    private lateinit var btnPlayerClose: ImageButton
+
     private var mediaPlayer: MediaPlayer? = null
+    private var isUserSeeking = false
+    private var playbackSpeed = 1.0f
     private var isVoiceMemoRecording = false
     private var selectedTab = "ALL"
+
+    private val playerHandler = Handler(Looper.getMainLooper())
+    private val updateSeekRunnable = object : Runnable {
+        override fun run() {
+            val mp = mediaPlayer
+            if (mp != null && mp.isPlaying && !isUserSeeking) {
+                seekBar.progress = mp.currentPosition
+                tvCurrentTime.text = formatTime(mp.currentPosition)
+            }
+            if (mp != null) {
+                playerHandler.postDelayed(this, 250)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +88,8 @@ class MainActivity : AppCompatActivity() {
         rvRecordings = findViewById(R.id.rvRecordings)
         rvRecordings.layoutManager = LinearLayoutManager(this)
         fabVoiceMemo = findViewById(R.id.fabVoiceMemo)
+
+        initPlayerViews()
 
         val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
         listOf("ALL", "INCALL", "OUTCALL", "FAVORITES", "EDITED").forEach {
@@ -88,6 +123,93 @@ class MainActivity : AppCompatActivity() {
         requestRequiredPermissions()
         updateStatusBanner()
         loadRecordings()
+    }
+
+    private fun initPlayerViews() {
+        playerCard = findViewById(R.id.playerCard)
+        tvPlayerTitle = findViewById(R.id.tvPlayerTitle)
+        seekBar = findViewById(R.id.seekBar)
+        tvCurrentTime = findViewById(R.id.tvCurrentTime)
+        tvTotalTime = findViewById(R.id.tvTotalTime)
+        btnPlayPause = findViewById(R.id.btnPlayPause)
+        btnRewind = findViewById(R.id.btnRewind)
+        btnForward = findViewById(R.id.btnForward)
+        btnSpeed = findViewById(R.id.btnSpeed)
+        btnPlayerClose = findViewById(R.id.btnPlayerClose)
+
+        seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    tvCurrentTime.text = formatTime(progress)
+                }
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {
+                isUserSeeking = true
+            }
+            override fun onStopTrackingTouch(sb: SeekBar?) {
+                isUserSeeking = false
+                mediaPlayer?.seekTo(sb?.progress ?: 0)
+            }
+        })
+
+        btnPlayPause.setOnClickListener {
+            val mp = mediaPlayer ?: return@setOnClickListener
+            if (mp.isPlaying) {
+                mp.pause()
+                btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
+            } else {
+                mp.start()
+                btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+            }
+        }
+
+        btnRewind.setOnClickListener {
+            val mp = mediaPlayer ?: return@setOnClickListener
+            val target = (mp.currentPosition - 10_000).coerceAtLeast(0)
+            mp.seekTo(target)
+            seekBar.progress = target
+            tvCurrentTime.text = formatTime(target)
+        }
+
+        btnForward.setOnClickListener {
+            val mp = mediaPlayer ?: return@setOnClickListener
+            val target = (mp.currentPosition + 10_000).coerceAtMost(mp.duration)
+            mp.seekTo(target)
+            seekBar.progress = target
+            tvCurrentTime.text = formatTime(target)
+        }
+
+        btnSpeed.setOnClickListener {
+            playbackSpeed = when (playbackSpeed) {
+                1.0f -> 1.5f
+                1.5f -> 2.0f
+                else -> 1.0f
+            }
+            btnSpeed.text = "${playbackSpeed}x"
+            applyPlaybackSpeed()
+        }
+
+        btnPlayerClose.setOnClickListener {
+            stopAndClosePlayer()
+        }
+    }
+
+    private fun applyPlaybackSpeed() {
+        val mp = mediaPlayer ?: return
+        try {
+            val params = mp.playbackParams
+            params.speed = playbackSpeed
+            mp.playbackParams = params
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun stopAndClosePlayer() {
+        playerHandler.removeCallbacks(updateSeekRunnable)
+        mediaPlayer?.release()
+        mediaPlayer = null
+        playerCard.visibility = View.GONE
     }
 
     override fun onResume() {
@@ -204,19 +326,46 @@ class MainActivity : AppCompatActivity() {
         rvRecordings.adapter = RecordingAdapter(filtered)
     }
 
-    private fun playFile(file: File) {
-        mediaPlayer?.release()
-        mediaPlayer = MediaPlayer().apply {
-            setDataSource(file.absolutePath)
-            prepare()
-            start()
+    private fun playFile(file: File, displayTitle: String) {
+        stopAndClosePlayer()
+        try {
+            val mp = MediaPlayer().apply {
+                setDataSource(file.absolutePath)
+                prepare()
+                setOnCompletionListener {
+                    btnPlayPause.setImageResource(android.R.drawable.ic_media_play)
+                    seekBar.progress = duration
+                    tvCurrentTime.text = formatTime(duration)
+                }
+                start()
+            }
+            mediaPlayer = mp
+            tvPlayerTitle.text = displayTitle
+            seekBar.max = mp.duration
+            seekBar.progress = 0
+            tvCurrentTime.text = "00:00"
+            tvTotalTime.text = formatTime(mp.duration)
+            btnPlayPause.setImageResource(android.R.drawable.ic_media_pause)
+            btnSpeed.text = "${playbackSpeed}x"
+            applyPlaybackSpeed()
+            playerCard.visibility = View.VISIBLE
+            playerHandler.post(updateSeekRunnable)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Toast.makeText(this, "Unable to play file", Toast.LENGTH_SHORT).show()
         }
-        Toast.makeText(this, "Playing ${file.name}", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun formatTime(ms: Int): String {
+        val totalSec = (ms / 1000).coerceAtLeast(0)
+        val min = totalSec / 60
+        val sec = totalSec % 60
+        return String.format(Locale.getDefault(), "%02d:%02d", min, sec)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        mediaPlayer?.release()
+        stopAndClosePlayer()
     }
 
     inner class RecordingAdapter(private val items: List<File>) :
@@ -241,9 +390,11 @@ class MainActivity : AppCompatActivity() {
             val dateStr = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
                 .format(Date(file.lastModified()))
             val sizeKb = file.length() / 1024
-            holder.tvName.text = formatDisplayTitle(file.name)
+            val title = formatDisplayTitle(file.name)
+            holder.tvName.text = title
             holder.tvMeta.text = "$dateStr  •  ${sizeKb} KB"
-            holder.btnPlay.setOnClickListener { playFile(file) }
+            holder.itemView.setOnClickListener { playFile(file, title) }
+            holder.btnPlay.setOnClickListener { playFile(file, title) }
             holder.btnShare.setOnClickListener { ShareHelper.shareRecording(this@MainActivity, file) }
             holder.btnDelete.setOnClickListener {
                 file.delete()
