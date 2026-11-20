@@ -100,7 +100,7 @@ object CallerInfoHelper {
     }
 
     private fun sanitizeFileName(input: String): String {
-        return input.replace(Regex("[^a-zA-Z0-9_+\- ]"), "").trim().replace(" ", "_")
+        return input.replace(Regex("[^a-zA-Z0-9_+ -]"), "").trim().replace(" ", "_")
             .ifBlank { "Unknown" }
     }
 }

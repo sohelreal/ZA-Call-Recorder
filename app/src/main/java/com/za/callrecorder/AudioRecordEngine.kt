@@ -30,7 +30,7 @@ class AudioRecordEngine(private val context: Context) {
         val autoSpeaker = prefs.getBoolean("auto_speakerphone", false)
         val preferredSource = prefs.getString("audio_source", "VOICE_RECOGNITION") ?: "VOICE_RECOGNITION"
 
-        val safeLabel = initialLabel.replace(Regex("[^a-zA-Z0-9_+\-]"), "_").ifBlank { "Call" }
+        val safeLabel = initialLabel.replace(Regex("[^a-zA-Z0-9_+-]"), "_").ifBlank { "Call" }
         currentTimestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         currentExt = if (format == "AMR") "amr" else "m4a"
 
