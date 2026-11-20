@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/nav_toggle_recording"
+        android:title="Toggle Auto Recording" />
+    <item
+        android:id="@+id/nav_accessibility"
+        android:title="Enable Accessibility (Both Sides)" />
+    <item
+        android:id="@+id/nav_speakerphone"
+        android:title="Toggle Auto Speakerphone Boost" />
+    <item
+        android:id="@+id/nav_audio_format"
+        android:title="Audio Format (AAC / AMR)" />
+    <item
+        android:id="@+id/nav_refresh"
+        android:title="Refresh Recordings" />
+</menu>
